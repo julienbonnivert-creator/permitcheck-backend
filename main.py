@@ -81,76 +81,63 @@ async def get_layers(req: LayersRequest):
 
 @app.post("/analyze")
 async def analyze(req: AnalyzeRequest):
-    """
-    Analyse complete :
-    1. Geocodage de l'adresse
-    2. Interrogation de toutes les couches WalOnMap
-    3. Generation du rapport par Claude
-    """
-
-    # 1. Geocodage
-    coords = None
-    address_label = f"{req.rue} {req.numero}, {req.commune}".strip()
-
-    if req.x_lb72 and req.y_lb72:
-        # Coordonnees fournies directement
-        coords = {"x": req.x_lb72, "y": req.y_lb72, "label": address_label}
-    else:
-        coords = await geocode_address(req.rue, req.numero, req.commune)
-
-    if not coords:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Impossible de geocoder l'adresse '{address_label}'. "
-                "Verifiez l'orthographe ou fournissez des coordonnees Lambert 72 "
-                "via les champs x_lb72 et y_lb72."
-            ),
-        )
-
-    x, y = coords["x"], coords["y"]
-    label = coords.get("label", address_label)
-    approximate = coords.get("approximate", False)
-
-    # 2. Couches WalOnMap (toutes en parallele)
-    layers = await query_all_layers(x, y)
-
-    # 3. Rapport IA
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        # Mode demo sans cle API — retourne les donnees brutes
-        return {
-            "geocoding": {"x": x, "y": y, "label": label, "approximate": approximate},
-            "layers": layers,
-            "report": "[DEMO] Configurez ANTHROPIC_API_KEY pour generer le rapport IA.",
-        }
-
+    import traceback
     try:
+        address_label = f"{req.rue} {req.numero}, {req.commune}".strip()
+
+        # 1. Geocodage
+        if req.x_lb72 and req.y_lb72:
+            coords = {"x": req.x_lb72, "y": req.y_lb72, "label": address_label}
+        else:
+            coords = await geocode_address(req.rue, req.numero, req.commune)
+
+        if not coords:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Impossible de geocoder '{address_label}'.",
+            )
+
+        x, y = coords["x"], coords["y"]
+        label = coords.get("label", address_label)
+        approximate = coords.get("approximate", False)
+
+        # 2. Couches WalOnMap
+        layers = await query_all_layers(x, y)
+
+        # 3. Rapport IA
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            return {
+                "geocoding": {"x": x, "y": y, "label": label},
+                "layers": layers,
+                "report": "[DEMO] Configurez ANTHROPIC_API_KEY.",
+            }
+
         report = await generate_report(
             address_label=label,
             project_description=req.project,
             layers=layers,
             commune=req.commune,
         )
-    except Exception as e:
-        import traceback
-        raise HTTPException(status_code=500, detail=f"Erreur generation rapport: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}")
 
-    return {
-        "geocoding": {
-            "x": x,
-            "y": y,
-            "label": label,
-            "approximate": approximate,
-        },
-        "layers_summary": report["data_layers"],
-        "report": report["report"],
-        "disclaimer": report["disclaimer"],
-        "meta": {
-            "model": report["model"],
-            "tokens": report["usage"],
-            "generated_at": datetime.utcnow().isoformat(),
-        },
-    }
+        return {
+            "geocoding": {"x": x, "y": y, "label": label, "approximate": approximate},
+            "layers_summary": report["data_layers"],
+            "report": report["report"],
+            "disclaimer": report["disclaimer"],
+            "meta": {
+                "model": report["model"],
+                "tokens": report["usage"],
+                "generated_at": datetime.utcnow().isoformat(),
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"{type(e).__name__}: {str(e)} | {traceback.format_exc()}"
+        )
 
 
 # ─── Dev server ───────────────────────────────────────────────────────────────
