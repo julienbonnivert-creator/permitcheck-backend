@@ -124,12 +124,16 @@ async def analyze(req: AnalyzeRequest):
             "report": "[DEMO] Configurez ANTHROPIC_API_KEY pour generer le rapport IA.",
         }
 
-    report = await generate_report(
-        address_label=label,
-        project_description=req.project,
-        layers=layers,
-        commune=req.commune,
-    )
+    try:
+        report = await generate_report(
+            address_label=label,
+            project_description=req.project,
+            layers=layers,
+            commune=req.commune,
+        )
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Erreur generation rapport: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}")
 
     return {
         "geocoding": {
