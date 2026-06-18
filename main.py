@@ -5,7 +5,7 @@ Analyse urbanistique et environnementale automatisee pour la Wallonie
 Usage:
   POST /analyze          — analyse complete (geocodage + couches + rapport IA)
   GET  /layers           — donnees brutes WalOnMap uniquement (sans rapport)
-  GET  /health           — statut du service
+  GET  /health           — statut du service 
 
 Deploiement: Railway / Render / Fly.io
 """
